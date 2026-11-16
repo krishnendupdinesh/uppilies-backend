@@ -164,7 +164,11 @@ async function resolveImageUpload(req, fallbackUrl = "", fallbackPublicId = null
     return { imageUrl: uploaded.url, imagePublicId: uploaded.publicId, replaced: true };
   }
 
-  const rawImage = String(req.body.image_url || req.body.image || "").trim();
+  const rawImage = String(req.body.image_url || req.body.image || req.body.url || "").trim();
+  const providedPublicId = String(
+    req.body.image_public_id || req.body.publicId || req.body.imagePublicId || ""
+  ).trim() || null;
+
   if (rawImage.startsWith("data:image/")) {
     if (isCloudinaryConfigured()) {
       const uploaded = await uploadBase64ToCloudinary(rawImage);
@@ -176,7 +180,7 @@ async function resolveImageUpload(req, fallbackUrl = "", fallbackPublicId = null
   if (rawImage) {
     return {
       imageUrl: rawImage,
-      imagePublicId: rawImage === fallbackUrl ? fallbackPublicId : null,
+      imagePublicId: providedPublicId || (rawImage === fallbackUrl ? fallbackPublicId : null),
       replaced: rawImage !== fallbackUrl && Boolean(fallbackPublicId),
     };
   }
