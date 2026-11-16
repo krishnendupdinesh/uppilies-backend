@@ -73,26 +73,33 @@ function formatProductRow(row) {
 async function getProducts(req, res) {
   try {
     const category = String(req.query.category || "").trim().toLowerCase();
+    const includeInactive = req.query.includeInactive === "true";
 
     let sql = `
       SELECT p.*, c.name AS category_name, c.slug AS category_slug
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      WHERE 1=1
     `;
     const params = [];
+
+    if (!includeInactive) {
+      sql += " AND (p.is_active = TRUE OR p.is_active IS NULL)";
+    }
 
     if (category && category !== "all" && category !== "products" && category !== "shop") {
       // Normalize traditional-foods / traditional-food slug variations
       if (category === "traditional-foods" || category === "traditional-food") {
-        sql += " WHERE c.slug IN ('traditional-food', 'traditional-foods') OR LOWER(c.name) = ?";
+        sql += " AND (c.slug IN ('traditional-food', 'traditional-foods') OR LOWER(c.name) = ?)";
         params.push(category);
       } else {
-        sql += " WHERE c.slug = ? OR LOWER(c.name) = ?";
+        sql += " AND (c.slug = ? OR LOWER(c.name) = ?)";
         params.push(category, category);
       }
+      sql += " ORDER BY COALESCE(p.display_order, 9999) ASC, p.id ASC";
+    } else {
+      sql += " ORDER BY COALESCE(p.category_id, 99) ASC, COALESCE(p.display_order, 9999) ASC, p.id ASC";
     }
-
-    sql += " ORDER BY p.created_at DESC";
 
     const [rows] = await pool.execute(sql, params);
     const products = rows.map(formatProductRow);

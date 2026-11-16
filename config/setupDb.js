@@ -38,6 +38,29 @@ async function setupDatabase() {
       await connection.query(statement);
     }
 
+    const safeMigrations = [
+      "ALTER TABLE categories ADD COLUMN subtitle VARCHAR(500) NULL",
+      "ALTER TABLE products ADD COLUMN subcategory VARCHAR(255) NULL",
+      "ALTER TABLE products ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE",
+      "ALTER TABLE products ADD COLUMN display_order INT NOT NULL DEFAULT 0",
+      "ALTER TABLE products ADD COLUMN tags TEXT NULL",
+      "ALTER TABLE products ADD COLUMN images_json TEXT NULL",
+      "ALTER TABLE products ADD COLUMN sizes_json TEXT NULL",
+      "ALTER TABLE products ADD COLUMN benefits TEXT NULL",
+      "ALTER TABLE products ADD COLUMN how_to_use TEXT NULL",
+      "ALTER TABLE products ADD COLUMN ingredients TEXT NULL",
+      "ALTER TABLE products ADD COLUMN return_policy TEXT NULL",
+      "ALTER TABLE products ADD COLUMN featured BOOLEAN NOT NULL DEFAULT FALSE",
+    ];
+
+    for (const sql of safeMigrations) {
+      try {
+        await connection.query(sql);
+      } catch {
+        // Column already exists
+      }
+    }
+
     console.log("Database tables and initial categories created successfully.");
   } catch (error) {
     console.error("Failed to set up database:", error.message);
