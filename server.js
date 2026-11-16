@@ -10,6 +10,11 @@ const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
+const reviewRoutes = require("./routes/reviewRoutes");
+const { trackVisitor } = require("./controllers/visitorController");
+const { submitContact } = require("./controllers/contactController");
+const { validateCoupon } = require("./controllers/couponController");
+const { optionalAuth } = require("./middleware/authMiddleware");
 
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
@@ -55,6 +60,10 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.post("/api/track", optionalAuth, trackVisitor);
+app.post("/api/contact", submitContact);
+app.post("/api/coupons/validate", validateCoupon);
 
 // Also mount route aliases without /api prefix in case NEXT_PUBLIC_API_URL ends with /api
 app.use("/auth", authRoutes);
@@ -62,6 +71,10 @@ app.use("/products", productRoutes);
 app.use("/orders", orderRoutes);
 app.use("/admin", adminRoutes);
 app.use("/categories", categoryRoutes);
+app.use("/reviews", reviewRoutes);
+app.post("/track", optionalAuth, trackVisitor);
+app.post("/contact", submitContact);
+app.post("/coupons/validate", validateCoupon);
 
 // Handles 404 for unknown API routes
 app.use((_req, res) => {

@@ -55,6 +55,8 @@ function formatProductRow(row) {
     mrp: Number.isFinite(mrp) ? mrp : 0,
     stock: Number.isFinite(stock) ? stock : 0,
     in_stock: Boolean(row.in_stock && stock > 0),
+    is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
+    display_order: Number(row.display_order || 0),
     image_url: row.image_url || "",
     image: row.image_url || "",
     image_public_id: row.image_public_id || null,
@@ -254,12 +256,23 @@ async function createProduct(req, res) {
     const ingredients = req.body.ingredients ? String(req.body.ingredients).trim() : null;
     const returnPolicy = req.body.returnPolicy || req.body.return_policy ? String(req.body.returnPolicy || req.body.return_policy).trim() : null;
 
+    // Shift existing products down so new product is at the top (display_order = 1)
+    try {
+      await pool.execute(
+        "UPDATE products SET display_order = display_order + 1 WHERE category_id <=> ?",
+        [categoryId]
+      );
+    } catch {
+      // Safe fallback
+    }
+
     const [result] = await pool.execute(
       `INSERT INTO products (
         category_id, name, slug, description, price, mrp, stock, in_stock,
+        display_order, is_active,
         image_url, image_public_id, images_json, sizes_json,
         benefits, how_to_use, ingredients, return_policy, featured
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         categoryId,
         name,
@@ -373,10 +386,18 @@ async function updateProduct(req, res) {
       ? String(req.body.returnPolicy ?? req.body.return_policy).trim()
       : existing.return_policy;
 
+    const isActive = req.body.is_active !== undefined
+      ? Boolean(req.body.is_active === "true" || req.body.is_active === true)
+      : (existing.is_active !== undefined ? Boolean(existing.is_active) : true);
+    const displayOrder = req.body.display_order !== undefined
+      ? Number(req.body.display_order)
+      : Number(existing.display_order || 0);
+
     await pool.execute(
       `UPDATE products SET
         category_id = ?, name = ?, description = ?, price = ?, mrp = ?,
-        stock = ?, in_stock = ?, image_url = ?, image_public_id = ?,
+        stock = ?, in_stock = ?, is_active = ?, display_order = ?,
+        image_url = ?, image_public_id = ?,
         images_json = ?, sizes_json = ?, benefits = ?, how_to_use = ?,
         ingredients = ?, return_policy = ?, featured = ?
        WHERE id = ?`,
@@ -388,6 +409,8 @@ async function updateProduct(req, res) {
         mrp,
         stock,
         inStock,
+        isActive,
+        displayOrder,
         imageUrl,
         imagePublicId,
         imagesJson,

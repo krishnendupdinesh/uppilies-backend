@@ -86,7 +86,7 @@ async function login(req, res) {
     }
 
     const [rows] = await pool.execute(
-      "SELECT id, name, email, password_hash, role FROM users WHERE email = ?",
+      "SELECT id, name, email, password_hash, role, is_blocked FROM users WHERE email = ?",
       [email]
     );
 
@@ -112,6 +112,12 @@ async function login(req, res) {
 
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    if (user.is_blocked) {
+      return res.status(403).json({
+        message: "Your account has been blocked. Please contact support.",
+      });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);

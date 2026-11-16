@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "migrate": "node config/migrate.js",
     "db:setup": "node config/setupDb.js",
     "seed:admin": "node config/seedAdmin.js",
     "seed:products": "node config/seedProducts.js"
