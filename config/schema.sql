@@ -9,12 +9,23 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS sections (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   slug VARCHAR(255) NOT NULL UNIQUE,
+  sort_order INT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  slug VARCHAR(255) NOT NULL UNIQUE,
+  section_id INT NOT NULL DEFAULT 1,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  image TEXT NULL,
   subtitle VARCHAR(500) NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_categories_section FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -26,6 +37,8 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT,
   price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   mrp DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  discount_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+  selling_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
   stock INT NOT NULL DEFAULT 0,
   in_stock BOOLEAN NOT NULL DEFAULT TRUE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -79,9 +92,30 @@ CREATE TABLE IF NOT EXISTS order_items (
   CONSTRAINT fk_order_items_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
 );
 
--- Seed default categories
-INSERT IGNORE INTO categories (name, slug, subtitle) VALUES
-  ('Herbal & Beauty', 'herbal-beauty', 'Pure Nature. Pure Goodness.'),
-  ('Traditional Food', 'traditional-foods', 'Homemade and traditional, straight from Kerala kitchens'),
-  ('Handloom', 'handloom', 'Authentic Kerala handloom, woven with care');
+-- Seed default sections (do not let admin delete them)
+INSERT IGNORE INTO sections (id, name, slug, sort_order) VALUES
+  (1, 'Herbal & Wellness', 'herbal-wellness', 1),
+  (2, 'Kerala Food Products', 'kerala-food-products', 2),
+  (3, 'Handloom', 'handloom', 3);
+
+-- Seed default categories under the 3 sections
+INSERT IGNORE INTO categories (name, slug, section_id, is_active) VALUES
+  -- Herbal & Wellness (section_id = 1)
+  ('Pain Relief', 'pain-relief', 1, TRUE),
+  ('Baby Care', 'baby-care', 1, TRUE),
+  ('Hair Care', 'hair-care', 1, TRUE),
+  ('Skin Care', 'skin-care', 1, TRUE),
+  ('Wellness Powders', 'wellness-powders', 1, TRUE),
+  ('Home Care', 'home-care', 1, TRUE),
+
+  -- Kerala Food Products (section_id = 2)
+  ('Powders', 'powders', 2, TRUE),
+  ('Chips & Sweets', 'chips-sweets', 2, TRUE),
+  ('Pickle, Ghee & Lard', 'pickle-ghee-lard', 2, TRUE),
+  ('Dried Foods', 'dried-foods', 2, TRUE),
+
+  -- Handloom (section_id = 3)
+  ('Sarees', 'sarees', 3, TRUE),
+  ('Set Mundu', 'set-mundu', 3, TRUE),
+  ('Dhotis', 'dhotis', 3, TRUE);
 

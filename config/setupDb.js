@@ -40,7 +40,11 @@ async function setupDatabase() {
 
     const safeMigrations = [
       "ALTER TABLE categories ADD COLUMN subtitle VARCHAR(500) NULL",
+      "ALTER TABLE categories ADD COLUMN image TEXT NULL",
+      "ALTER TABLE categories ADD UNIQUE INDEX uq_categories_name (name)",
       "ALTER TABLE products ADD COLUMN subcategory VARCHAR(255) NULL",
+      "ALTER TABLE products ADD COLUMN discount_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00",
+      "ALTER TABLE products ADD COLUMN selling_price DECIMAL(10, 2) NOT NULL DEFAULT 0.00",
       "ALTER TABLE products ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE",
       "ALTER TABLE products ADD COLUMN display_order INT NOT NULL DEFAULT 0",
       "ALTER TABLE products ADD COLUMN tags TEXT NULL",
@@ -57,8 +61,25 @@ async function setupDatabase() {
       try {
         await connection.query(sql);
       } catch {
-        // Column already exists
+        // Column or index already exists
       }
+    }
+
+    // Migrate existing products: set mrp = old price, discount_percent = 0, selling_price = old price
+    try {
+      await connection.query(`
+        UPDATE products
+        SET
+          mrp = CASE WHEN mrp > 0 THEN mrp ELSE price END,
+          discount_percent = 0.00,
+          selling_price = CASE WHEN price > 0 THEN price ELSE mrp END
+        WHERE selling_price = 0.00 OR selling_price IS NULL
+      `);
+      await connection.query(`
+        UPDATE products SET price = selling_price WHERE price != selling_price
+      `);
+    } catch {
+      // Safe fallback
     }
 
     console.log("Database tables and initial categories created successfully.");

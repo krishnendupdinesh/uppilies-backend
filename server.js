@@ -11,6 +11,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const { getMenu } = require("./controllers/categoryController");
 const { trackVisitor } = require("./controllers/visitorController");
 const { submitContact } = require("./controllers/contactController");
 const { validateCoupon } = require("./controllers/couponController");
@@ -55,6 +56,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 // Mount API routes under /api
+app.get("/api/menu", getMenu);
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
@@ -66,6 +68,7 @@ app.post("/api/contact", submitContact);
 app.post("/api/coupons/validate", validateCoupon);
 
 // Also mount route aliases without /api prefix in case NEXT_PUBLIC_API_URL ends with /api
+app.get("/menu", getMenu);
 app.use("/auth", authRoutes);
 app.use("/products", productRoutes);
 app.use("/orders", orderRoutes);

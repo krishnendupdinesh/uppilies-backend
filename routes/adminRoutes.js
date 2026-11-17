@@ -16,12 +16,37 @@ const {
   updateMessageStatus,
   deleteAdminMessage,
 } = require("../controllers/adminController");
+const {
+  getAdminCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} = require("../controllers/categoryController");
+const {
+  getProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} = require("../controllers/productController");
 const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
+const upload = require("../middleware/uploadMiddleware");
 
 const router = express.Router();
 
 // All routes here require authentication with admin role
 router.use(requireAuth, requireAdmin);
+
+// Categories management (Admin-only)
+router.get("/categories", getAdminCategories);
+router.post("/categories", createCategory);
+router.put("/categories/:id", updateCategory);
+router.delete("/categories/:id", deleteCategory);
+
+// Products management (Admin-only)
+router.get("/products", getProducts);
+router.post("/products", upload.single("image"), createProduct);
+router.put("/products/:id", upload.single("image"), updateProduct);
+router.delete("/products/:id", deleteProduct);
 
 // Dashboard summary stats & analytics
 router.get("/stats", getAdminStats);

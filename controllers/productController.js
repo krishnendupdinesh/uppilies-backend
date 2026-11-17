@@ -7,10 +7,25 @@ const {
   deleteFromCloudinary,
 } = require("../utils/cloudinaryUpload");
 
+// Calculates selling_price = mrp - (mrp * discount_percent / 100), rounded to 2 decimals
+function calculateSellingPrice(mrp, discountPercent) {
+  const m = Number(mrp) || 0;
+  const d = Number(discountPercent) || 0;
+  if (m <= 0) return 0;
+  const calculated = m - (m * d / 100);
+  return Math.max(0, Math.round(calculated * 100) / 100);
+}
+
 // Formats a database product row into a clean JSON object with guaranteed numeric prices
 function formatProductRow(row) {
-  const price = Number(row.price || 0);
-  const mrp = Number(row.mrp || price);
+  const rawMrp = Number(row.mrp !== undefined && row.mrp !== null ? row.mrp : row.price || 0);
+  const mrp = Number.isFinite(rawMrp) && rawMrp > 0 ? rawMrp : Number(row.price || 0);
+  const discountPercent = Number(row.discount_percent || 0);
+  const calculatedSelling = calculateSellingPrice(mrp, discountPercent);
+  const sellingPrice = row.selling_price !== undefined && row.selling_price !== null && Number(row.selling_price) >= 0
+    ? Number(row.selling_price)
+    : calculatedSelling;
+  const finalPrice = Number.isFinite(sellingPrice) ? sellingPrice : calculatedSelling;
   const stock = Number(row.stock ?? 0);
 
   let images = [];
@@ -30,12 +45,21 @@ function formatProductRow(row) {
     try {
       const parsedSizes = JSON.parse(row.sizes_json);
       if (Array.isArray(parsedSizes)) {
-        sizes = parsedSizes.map((s) => ({
-          size: String(s.size || ""),
-          price: Number(s.price || price),
-          mrp: Number(s.mrp || s.price || price),
-          stock: Number(s.stock ?? stock),
-        }));
+        sizes = parsedSizes.map((s) => {
+          const sMrp = Number(s.mrp || s.price || finalPrice);
+          const sDiscount = Number(s.discount_percent !== undefined ? s.discount_percent : discountPercent);
+          const sSelling = s.selling_price !== undefined
+            ? Number(s.selling_price)
+            : calculateSellingPrice(sMrp, sDiscount);
+          return {
+            size: String(s.size || ""),
+            price: Number(sSelling),
+            selling_price: Number(sSelling),
+            mrp: Number(sMrp),
+            discount_percent: Number(sDiscount),
+            stock: Number(s.stock ?? stock),
+          };
+        });
       }
     } catch {
       sizes = [];
@@ -51,8 +75,10 @@ function formatProductRow(row) {
     name: row.name,
     slug: row.slug,
     description: row.description || "",
-    price: Number.isFinite(price) ? price : 0,
+    price: Number.isFinite(finalPrice) ? finalPrice : 0,
     mrp: Number.isFinite(mrp) ? mrp : 0,
+    discount_percent: Number.isFinite(discountPercent) ? discountPercent : 0,
+    selling_price: Number.isFinite(finalPrice) ? finalPrice : 0,
     stock: Number.isFinite(stock) ? stock : 0,
     in_stock: Boolean(row.in_stock && stock > 0),
     is_active: row.is_active !== undefined ? Boolean(row.is_active) : true,
@@ -201,19 +227,26 @@ async function resolveImageUpload(req, fallbackUrl = "", fallbackPublicId = null
 async function createProduct(req, res) {
   try {
     const name = String(req.body.name || "").trim();
-    const rawPrice = Number(req.body.price);
-
     if (!name) {
       return res.status(400).json({ message: "Product name is required" });
     }
-    if (!Number.isFinite(rawPrice) || rawPrice < 0) {
-      return res.status(400).json({ message: "Valid product price is required" });
+
+    // Validation: mrp must be a number greater than 0
+    const rawMrp = Number(req.body.mrp !== undefined ? req.body.mrp : req.body.price);
+    if (!Number.isFinite(rawMrp) || rawMrp <= 0) {
+      return res.status(400).json({ message: "MRP must be a number greater than 0" });
     }
 
-    const price = Number(rawPrice);
-    const mrp = Number.isFinite(Number(req.body.mrp)) && Number(req.body.mrp) > 0
-      ? Number(req.body.mrp)
-      : price;
+    // Validation: discount_percent must be between 0 and 100
+    const rawDiscount = req.body.discount_percent !== undefined ? Number(req.body.discount_percent) : 0;
+    if (!Number.isFinite(rawDiscount) || rawDiscount < 0 || rawDiscount > 100) {
+      return res.status(400).json({ message: "Discount percent must be between 0 and 100" });
+    }
+
+    const mrp = Math.round(rawMrp * 100) / 100;
+    const discountPercent = Math.round(rawDiscount * 100) / 100;
+    const sellingPrice = calculateSellingPrice(mrp, discountPercent);
+
     const stock = Number.isFinite(Number(req.body.stock)) ? Number(req.body.stock) : 25;
     const inStock = req.body.in_stock !== undefined
       ? Boolean(req.body.in_stock === "true" || req.body.in_stock === true) && stock > 0
@@ -268,18 +301,20 @@ async function createProduct(req, res) {
 
     const [result] = await pool.execute(
       `INSERT INTO products (
-        category_id, name, slug, description, price, mrp, stock, in_stock,
-        display_order, is_active,
+        category_id, name, slug, description, mrp, discount_percent, selling_price, price,
+        stock, in_stock, display_order, is_active,
         image_url, image_public_id, images_json, sizes_json,
         benefits, how_to_use, ingredients, return_policy, featured
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         categoryId,
         name,
         slug,
         description,
-        price,
         mrp,
+        discountPercent,
+        sellingPrice,
+        sellingPrice,
         stock,
         inStock,
         imageUrl,
@@ -328,12 +363,28 @@ async function updateProduct(req, res) {
       return res.status(400).json({ message: "Product name cannot be empty" });
     }
 
-    const price = req.body.price !== undefined ? Number(req.body.price) : Number(existing.price);
-    if (!Number.isFinite(price) || price < 0) {
-      return res.status(400).json({ message: "Valid product price is required" });
+    // Validation: mrp must be a number greater than 0
+    let mrp = existing.mrp !== undefined && Number(existing.mrp) > 0 ? Number(existing.mrp) : Number(existing.price || 0);
+    if (req.body.mrp !== undefined) {
+      const rawMrp = Number(req.body.mrp);
+      if (!Number.isFinite(rawMrp) || rawMrp <= 0) {
+        return res.status(400).json({ message: "MRP must be a number greater than 0" });
+      }
+      mrp = Math.round(rawMrp * 100) / 100;
     }
 
-    const mrp = req.body.mrp !== undefined ? Number(req.body.mrp) : Number(existing.mrp || price);
+    // Validation: discount_percent must be between 0 and 100
+    let discountPercent = existing.discount_percent !== undefined ? Number(existing.discount_percent) : 0;
+    if (req.body.discount_percent !== undefined) {
+      const rawDiscount = Number(req.body.discount_percent);
+      if (!Number.isFinite(rawDiscount) || rawDiscount < 0 || rawDiscount > 100) {
+        return res.status(400).json({ message: "Discount percent must be between 0 and 100" });
+      }
+      discountPercent = Math.round(rawDiscount * 100) / 100;
+    }
+
+    const sellingPrice = calculateSellingPrice(mrp, discountPercent);
+
     const stock = req.body.stock !== undefined ? Number(req.body.stock) : Number(existing.stock);
     const inStock = req.body.in_stock !== undefined
       ? Boolean(req.body.in_stock === "true" || req.body.in_stock === true) && stock > 0
@@ -395,7 +446,8 @@ async function updateProduct(req, res) {
 
     await pool.execute(
       `UPDATE products SET
-        category_id = ?, name = ?, description = ?, price = ?, mrp = ?,
+        category_id = ?, name = ?, description = ?,
+        mrp = ?, discount_percent = ?, selling_price = ?, price = ?,
         stock = ?, in_stock = ?, is_active = ?, display_order = ?,
         image_url = ?, image_public_id = ?,
         images_json = ?, sizes_json = ?, benefits = ?, how_to_use = ?,
@@ -405,8 +457,10 @@ async function updateProduct(req, res) {
         categoryId,
         name,
         description,
-        price,
         mrp,
+        discountPercent,
+        sellingPrice,
+        sellingPrice,
         stock,
         inStock,
         isActive,
@@ -468,6 +522,7 @@ async function deleteProduct(req, res) {
 }
 
 module.exports = {
+  calculateSellingPrice,
   getProducts,
   getProductBySlug,
   createProduct,
